@@ -4,6 +4,7 @@
 #include <mdspan> // For std::mdspan
 #include <print>
 #include <unordered_map>
+#include <utility>
 
 enum class State {
   Idle,
@@ -45,8 +46,8 @@ inline State transition_to(State currentState, Event event) {
 void test_transition(State current, Event event, State expected) {
   State result = transition_to(current, event);
   std::println("State: {}, Event: {} => Result: {}, Expected: {} {}",
-               static_cast<int>(current), static_cast<int>(event),
-               static_cast<int>(result), static_cast<int>(expected),
+               std::to_underlying(current), std::to_underlying(event),
+               std::to_underlying(result), std::to_underlying(expected),
                (result == expected) ? "PASS" : "FAIL");
 }
 
@@ -62,8 +63,8 @@ struct TransitionCallbackKey {
 
 struct TransitionCallbackKeyHash {
   size_t operator()(const TransitionCallbackKey &key) const noexcept {
-    size_t h1 = std::hash<int>{}(static_cast<int>(key.type));
-    size_t h2 = std::hash<int>{}(static_cast<int>(key.state));
+    size_t h1 = std::hash<int>{}(std::to_underlying(key.type));
+    size_t h2 = std::hash<int>{}(std::to_underlying(key.state));
     return h1 ^ (h2 << 1);
   }
 };
@@ -107,7 +108,7 @@ State process_event(State current, Event event) {
   TransitionCallbackKey key{};
 
   key.type = TransitionType::After;
-  key.state = next;
+  key.state = current;
   auto it = transitions_callbacks_storage.find(key);
   if (it != transitions_callbacks_storage.end()) {
     for (const auto &cb : it->second) {
@@ -160,17 +161,26 @@ int main() {
 
   attach_callback(
       TransitionType::Before, State::Active,
-      [](TransitionType type, State current, State next, Event event) {
-        std::println("Transition before state = {} from = {}",
-                     static_cast<int>(next), static_cast<int>(current));
+      [&](TransitionType type, State current, State next, Event event) {
+        std::println("Entering state = {} from = {} by event = {}",
+                     std::to_underlying(next), std::to_underlying(current),
+                     std::to_underlying(event));
+      });
+
+  attach_callback(
+      TransitionType::After, State::Idle,
+      [&](TransitionType type, State current, State next, Event event) {
+        std::println("Exiting state = {} into = {} by event = {}",
+                     std::to_underlying(current), std::to_underlying(next),
+                     std::to_underlying(event));
       });
 
   attach_transition_guard(
       State::Idle, [&](State current, State next, Event event) {
         std::println("Guard called before transitioning into state = {} from "
                      "state = {} on event = {}",
-                     static_cast<int>(next), static_cast<int>(current),
-                     static_cast<int>(event));
+                     std::to_underlying(next), std::to_underlying(current),
+                     std::to_underlying(event));
 
         return true;
       });
