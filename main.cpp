@@ -82,10 +82,26 @@ using TransitionsCallbackStorage =
 
 TransitionsCallbackStorage transitions_callbacks_storage{};
 
+using TransitionGuard = std::function<bool(State, State, Event)>;
+using TransitionGuardStorage = std::unordered_map<State, TransitionGuard>;
+
+TransitionGuardStorage transitions_guards{};
+
 State process_event(State current, Event event) {
   const auto next = transition_to(current, event);
   if (next == State::MAX_COUNT) {
     return next;
+  }
+
+  auto transition_guard_it = transitions_guards.find(current);
+  if (transition_guard_it != transitions_guards.end()) {
+    if (transition_guard_it->second) {
+      bool result =
+          std::invoke(transition_guard_it->second, current, next, event);
+      if (result == false) {
+        return State::MAX_COUNT;
+      }
+    }
   }
 
   TransitionCallbackKey key{};
@@ -128,6 +144,10 @@ void attach_callback(TransitionType type, State state,
   }
 }
 
+void attach_transition_guard(State state, TransitionGuard guard) {
+  transitions_guards.insert({state, guard});
+}
+
 int main() {
   // Initialize transitions table with State::MAX_COUNT
   std::fill(transitions_storage.begin(), transitions_storage.end(),
@@ -145,6 +165,15 @@ int main() {
                      static_cast<int>(next), static_cast<int>(current));
       });
 
+  attach_transition_guard(
+      State::Idle, [&](State current, State next, Event event) {
+        std::println("Guard called before transitioning into state = {} from "
+                     "state = {} on event = {}",
+                     static_cast<int>(next), static_cast<int>(current),
+                     static_cast<int>(event));
+
+        return true;
+      });
   auto res = process_event(State::Idle, Event::Start);
   if (res == State::MAX_COUNT) {
     std::println("Invalid transition");
