@@ -1,0 +1,43 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+- `StateMachine.hpp`, `EnumUtils.hpp`: Header-only C++23 FSM and enum helpers.
+- `main.cpp`: Example app demonstrating transitions, guards, and callbacks.
+- `test_state_machine.cpp`, `test_*.cpp`: Self-contained tests (no framework).
+- `CMakeLists.txt`: Builds `main` and `fsm_tests` executables.
+- `build/`: CMake build artifacts (generated).
+- `build.sh`, `run.sh`: Convenience scripts for local development.
+
+## Build, Test, and Development Commands
+- First configure: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`
+- Build all: `cmake --build build` or `./build.sh`
+- Run example: `./build/main` or `./run.sh`
+- Run tests: `./build/fsm_tests`
+- Reconfigure release: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+
+Toolchain: C++23 with `std::mdspan`, `std::expected`, and `std::print` support (CMake ≥ 3.20; modern Clang/GCC/libc++/libstdc++).
+
+## Coding Style & Naming Conventions
+- Language: C++23; header-only library style.
+- Indentation: 2 spaces; braces on the same line.
+- Naming: types/enums `PascalCase` (e.g., `TransitionType`), functions `lowerCamelCase` (e.g., `processEvent`), private members `camelCase_` suffix (e.g., `currentState_`).
+- Headers: prefer `.hpp`; keep headers self-contained and include what you use.
+- Prefer `constexpr`, spans/`mdspan`, and STL algorithms over raw loops where sensible.
+
+## Testing Guidelines
+- Tests are simple executables using the standard library (no third-party framework).
+- File naming: `test_<topic>.cpp` at repo root.
+- Add tests to CMake by creating an executable, for example:
+  `add_executable(my_tests test_my_feature.cpp)`
+- Run with `./build/<target>` and return non-zero on failure.
+- Aim for meaningful console output: `[PASS]/[FAIL]` and a final summary.
+
+## Commit & Pull Request Guidelines
+- Commits: short, imperative subjects (e.g., "Add enum utilities", "Fix transition guard"); keep ≤ 72 chars; include a rationale body when needed.
+- Scope changes narrowly; separate refactors from behavior changes.
+- PRs: include a concise description, linked issues, before/after output for behavior, and instructions to reproduce (commands used).
+- Ensure `cmake --build build` succeeds and `./build/fsm_tests` passes before requesting review.
+
+## Security & Configuration Tips
+- Avoid undefined behavior; validate enum bounds and sentinel usage (`MAX_VALUE`).
+- Keep public APIs header-only and minimal; prefer `std::function` only on boundaries.
