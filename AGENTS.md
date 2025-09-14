@@ -1,24 +1,24 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `StateMachine.hpp`, `EnumUtils.hpp`: Header-only C++23 FSM and enum helpers.
-- `main.cpp`: Example app demonstrating transitions, guards, and callbacks.
-- `test_state_machine.cpp`, `test_*.cpp`: Self-contained tests (no framework).
-- `CMakeLists.txt`: Builds `main` and `fsm_tests` executables.
+- `include/state_machine/*.hpp`: Header-only C++23 FSM and enum helpers.
+- `example/`: Concrete example project (`state_machine_example`).
+- `tests/`: Self-contained tests (no framework).
+- `CMakeLists.txt`: Declares `state_machine` INTERFACE target with optional subdirs.
 - `build/`: CMake build artifacts (generated).
 - `build.sh`, `run.sh`: Convenience scripts for local development.
 
 ## Build, Test, and Development Commands
 - First configure: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`
 - Build all: `cmake --build build` or `./build.sh`
-- Run example: `./build/main` or `./run.sh`
-- Run tests: `./build/fsm_tests`
+- Run example: `./build/example/state_machine_example` or `./run.sh` (if `STATE_MACHINE_BUILD_EXAMPLES=ON`)
+- Run tests: `./build/tests/fsm_tests` and `./build/tests/test_mdspan` (if `STATE_MACHINE_BUILD_TESTS=ON`)
 - Reconfigure release: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
 
 Toolchain: C++23 with `std::mdspan`, `std::expected`, and `std::print` support (CMake ≥ 3.20; modern Clang/GCC/libc++/libstdc++).
 
 ## Coding Style & Naming Conventions
-- Language: C++23; header-only library style.
+- Language: C++23; header-only library style; public headers under `include/state_machine`.
 - Indentation: 2 spaces; braces on the same line.
 - Naming: types/enums `PascalCase` (e.g., `TransitionType`), functions `lowerCamelCase` (e.g., `processEvent`), private members `camelCase_` suffix (e.g., `currentState_`).
 - Headers: prefer `.hpp`; keep headers self-contained and include what you use.

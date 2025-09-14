@@ -1,4 +1,4 @@
 #!/bin/bash
 
 set -e
-./build/main
+./build/example/state_machine_example

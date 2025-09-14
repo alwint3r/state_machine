@@ -1,6 +1,5 @@
 #pragma once
 
-#include "EnumUtils.hpp"
 #include <algorithm>
 #include <array>
 #include <concepts>
@@ -8,7 +7,7 @@
 #include <expected>
 #include <functional>
 #include <mdspan>
-#include <ranges>
+#include <state_machine/EnumUtils.hpp>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -17,11 +16,10 @@
 namespace state_machine {
 
 template <typename T>
-concept StateID =
-    std::is_enum_v<T> && std::is_integral_v<std::underlying_type_t<T>> &&
-    requires {
-      { std::to_underlying(T::MAX_VALUE) } -> std::integral;
-    };
+concept StateID = std::is_enum_v<T> &&
+                  std::is_integral_v<std::underlying_type_t<T>> && requires {
+                    { std::to_underlying(T::MAX_VALUE) } -> std::integral;
+                  };
 
 template <typename T>
 concept EventID = StateID<T>;
@@ -132,8 +130,7 @@ public:
     if (it != transitionCallbackStorage_.end()) {
       for (const auto &cb : it->second) {
         if (cb) {
-          std::invoke(cb, TransitionType::Enter, prevState, nextState,
-                      event);
+          std::invoke(cb, TransitionType::Enter, prevState, nextState, event);
         }
       }
     }
@@ -171,9 +168,9 @@ private:
       transitionStorage_.data()};
 
   using TransitionCallbackVector = std::vector<TransitionCallbackFn<S, E>>;
-  using TransitionCallbackStorage = std::unordered_map<
-      TransitionCallbackMapKey<S>, TransitionCallbackVector,
-      TransitionCallbackMapKeyHash>;
+  using TransitionCallbackStorage =
+      std::unordered_map<TransitionCallbackMapKey<S>, TransitionCallbackVector,
+                         TransitionCallbackMapKeyHash>;
   TransitionCallbackStorage transitionCallbackStorage_{};
 
   using TransitionGuardVector = std::vector<TransitionGuard<S, E>>;

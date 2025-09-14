@@ -1,11 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
-project(Main)
+project(state_machine CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(main main.cpp)
+# Header-only library
+add_library(state_machine INTERFACE)
+target_include_directories(state_machine INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_compile_features(state_machine INTERFACE cxx_std_23)
 
-# Header-only FSM tests (no third-party libs)
-add_executable(fsm_tests test_state_machine.cpp)
+option(STATE_MACHINE_BUILD_EXAMPLES "Build example project" ON)
+option(STATE_MACHINE_BUILD_TESTS "Build tests" ON)
+
+if(STATE_MACHINE_BUILD_EXAMPLES)
+  add_subdirectory(example)
+endif()
+
+if(STATE_MACHINE_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()

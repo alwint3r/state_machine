@@ -8,7 +8,7 @@
 #include <print>
 #include <vector>
 
-#include "StateMachine.hpp"
+#include <state_machine/StateMachine.hpp>
 
 namespace sm = state_machine;
 
