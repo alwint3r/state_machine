@@ -7,3 +7,5 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(main main.cpp)
 
+# Header-only FSM tests (no third-party libs)
+add_executable(fsm_tests test_state_machine.cpp)
