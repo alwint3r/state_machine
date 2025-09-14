@@ -1,3 +1,4 @@
+#include "EnumUtils.hpp"
 #include <algorithm> // For std::fill
 #include <array>     // For std::array
 #include <expected>
@@ -13,7 +14,7 @@ enum class State {
   Active,
   Stopped,
   Canceled,
-  MAX_COUNT,
+  MAX_VALUE,
 };
 
 // Idle -> Active: Start
@@ -26,11 +27,11 @@ enum class Event {
   Timeout,
   Cancel,
   Restart,
-  MAX_COUNT,
+  MAX_VALUE,
 };
 
-static constexpr auto StateSize = static_cast<size_t>(State::MAX_COUNT);
-static constexpr auto EventSize = static_cast<size_t>(Event::MAX_COUNT);
+static constexpr auto StateSize = enum_utils::enum_size_v<State>;
+static constexpr auto EventSize = enum_utils::enum_size_v<Event>;
 
 static std::array<State, StateSize * EventSize> transitions_storage{};
 static std::mdspan<State, std::extents<size_t, StateSize, EventSize>>
@@ -98,7 +99,7 @@ enum class ProcessEventErr {
 std::expected<State, ProcessEventErr> process_event_v2(State current,
                                                        Event event) {
   const auto next = transition_to(current, event);
-  if (next == State::MAX_COUNT) {
+  if (next == State::MAX_VALUE) {
     return std::unexpected(ProcessEventErr::NoNextStateFound);
   }
 
@@ -166,9 +167,13 @@ void attach_transition_guard(State state, TransitionGuard guard) {
 }
 
 int main() {
-  // Initialize transitions table with State::MAX_COUNT
+  // Demonstrate computing max enumerator programmatically via helper.
+  static_assert(enum_utils::enum_max_v<State> == State::Canceled);
+  static_assert(enum_utils::enum_max_v<Event> == Event::Restart);
+
+  // Initialize transitions table with State::MAX_VALUE
   std::fill(transitions_storage.begin(), transitions_storage.end(),
-            State::MAX_COUNT);
+            State::MAX_VALUE);
 
   add_transition(State::Idle, State::Active, Event::Start);
   add_transition(State::Active, State::Stopped, Event::Timeout);
@@ -214,8 +219,8 @@ int main() {
   test_transition(State::Stopped, Event::Restart, State::Active);
 
   // Test some invalid transitions
-  test_transition(State::Idle, Event::Timeout, State::MAX_COUNT);
-  test_transition(State::Canceled, Event::Restart, State::MAX_COUNT);
+  test_transition(State::Idle, Event::Timeout, State::MAX_VALUE);
+  test_transition(State::Canceled, Event::Restart, State::MAX_VALUE);
 
   return 0;
 }
