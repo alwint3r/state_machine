@@ -1,10 +1,12 @@
 #include <algorithm> // For std::fill
 #include <array>     // For std::array
+#include <expected>
 #include <functional>
 #include <mdspan> // For std::mdspan
 #include <print>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 enum class State {
   Idle,
@@ -52,8 +54,8 @@ void test_transition(State current, Event event, State expected) {
 }
 
 enum class TransitionType {
-  Before,
-  After,
+  Enter,
+  Exit,
 };
 
 struct TransitionCallbackKey {
@@ -88,10 +90,16 @@ using TransitionGuardStorage = std::unordered_map<State, TransitionGuard>;
 
 TransitionGuardStorage transitions_guards{};
 
-State process_event(State current, Event event) {
+enum class ProcessEventErr {
+  TransitionForbidden,
+  NoNextStateFound,
+};
+
+std::expected<State, ProcessEventErr> process_event_v2(State current,
+                                                       Event event) {
   const auto next = transition_to(current, event);
   if (next == State::MAX_COUNT) {
-    return next;
+    return std::unexpected(ProcessEventErr::NoNextStateFound);
   }
 
   auto transition_guard_it = transitions_guards.find(current);
@@ -100,40 +108,40 @@ State process_event(State current, Event event) {
       bool result =
           std::invoke(transition_guard_it->second, current, next, event);
       if (result == false) {
-        return State::MAX_COUNT;
+        return std::unexpected(ProcessEventErr::TransitionForbidden);
       }
     }
   }
 
   TransitionCallbackKey key{};
+  TransitionsCallbackStorage::iterator it;
 
-  key.type = TransitionType::After;
+  key.type = TransitionType::Exit;
   key.state = current;
-  auto it = transitions_callbacks_storage.find(key);
+  it = transitions_callbacks_storage.find(key);
   if (it != transitions_callbacks_storage.end()) {
     for (const auto &cb : it->second) {
       if (cb) {
-        cb(TransitionType::After, current, next, event);
+        cb(TransitionType::Exit, current, next, event);
       }
     }
   }
 
-  key.type = TransitionType::Before;
+  key.type = TransitionType::Enter;
   key.state = next;
   it = transitions_callbacks_storage.find(key);
   if (it != transitions_callbacks_storage.end()) {
     for (const auto &cb : it->second) {
       if (cb) {
-        cb(TransitionType::Before, current, next, event);
+        cb(TransitionType::Enter, current, next, event);
       }
     }
   }
-
   return next;
 }
 
-void attach_callback(TransitionType type, State state,
-                     TransitionsCallback callback) {
+void attach_transition_callback(TransitionType type, State state,
+                                TransitionsCallback callback) {
   auto key = TransitionCallbackKey{type, state};
   auto it = transitions_callbacks_storage.find(key);
   if (it == transitions_callbacks_storage.end()) {
@@ -145,8 +153,16 @@ void attach_callback(TransitionType type, State state,
   }
 }
 
+void attach_on_enter_callback(State state, TransitionsCallback callback) {
+  attach_transition_callback(TransitionType::Enter, state, callback);
+}
+
+void attach_on_exit_callback(State state, TransitionsCallback callback) {
+  attach_transition_callback(TransitionType::Exit, state, callback);
+}
+
 void attach_transition_guard(State state, TransitionGuard guard) {
-  transitions_guards.insert({state, guard});
+  transitions_guards.insert_or_assign(state, guard);
 }
 
 int main() {
@@ -159,21 +175,20 @@ int main() {
   add_transition(State::Active, State::Canceled, Event::Cancel);
   add_transition(State::Stopped, State::Active, Event::Restart);
 
-  attach_callback(
-      TransitionType::Before, State::Active,
+  attach_on_enter_callback(
+      State::Active,
       [&](TransitionType type, State current, State next, Event event) {
         std::println("Entering state = {} from = {} by event = {}",
                      std::to_underlying(next), std::to_underlying(current),
                      std::to_underlying(event));
       });
 
-  attach_callback(
-      TransitionType::After, State::Idle,
-      [&](TransitionType type, State current, State next, Event event) {
-        std::println("Exiting state = {} into = {} by event = {}",
-                     std::to_underlying(current), std::to_underlying(next),
-                     std::to_underlying(event));
-      });
+  attach_on_exit_callback(State::Idle, [&](TransitionType type, State current,
+                                           State next, Event event) {
+    std::println("Exiting state = {} into = {} by event = {}",
+                 std::to_underlying(current), std::to_underlying(next),
+                 std::to_underlying(event));
+  });
 
   attach_transition_guard(
       State::Idle, [&](State current, State next, Event event) {
@@ -184,9 +199,12 @@ int main() {
 
         return true;
       });
-  auto res = process_event(State::Idle, Event::Start);
-  if (res == State::MAX_COUNT) {
-    std::println("Invalid transition");
+
+  auto res2 = process_event_v2(State::Idle, Event::Start);
+  if (res2) {
+    std::println("Event processing using process_event_v2 is processed "
+                 "successfully. Next State = {}",
+                 std::to_underlying(*res2));
   }
 
   // Test all defined transitions
