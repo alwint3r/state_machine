@@ -191,6 +191,89 @@ int main() {
     ts.expect_eq(fsm.getCurrentState(), TState::Stopped, "State is Stopped");
   }
 
+  // Test 8: Multiple events from same state to same target (Idle->Active on
+  // Start and Restart)
+  {
+    sm::FSM<TState, TEvent> fsm(TState::Idle);
+    fsm.init();
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Restart);
+
+    auto r1 = fsm.processEvent(TEvent::Start);
+    ts.expect_true(r1.has_value(), "Idle->Active on Start works (multi-event)");
+    ts.expect_eq(fsm.getCurrentState(), TState::Active,
+                 "State is Active after Start");
+
+    // New instance to test the other event from Idle
+    sm::FSM<TState, TEvent> fsm2(TState::Idle);
+    fsm2.init();
+    fsm2.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+    fsm2.enableTransition(TState::Idle, TState::Active, TEvent::Restart);
+    auto r2 = fsm2.processEvent(TEvent::Restart);
+    ts.expect_true(r2.has_value(),
+                   "Idle->Active on Restart works (multi-event)");
+    ts.expect_eq(fsm2.getCurrentState(), TState::Active,
+                 "State is Active after Restart");
+  }
+
+  // Test 9: Edge - one event defined, another missing
+  {
+    sm::FSM<TState, TEvent> fsm(TState::Idle);
+    fsm.init();
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+
+    auto ok = fsm.processEvent(TEvent::Start);
+    ts.expect_true(ok.has_value(), "Defined event transitions (Start)");
+
+    // Reset and try missing event
+    sm::FSM<TState, TEvent> fsm3(TState::Idle);
+    fsm3.init();
+    fsm3.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+    auto missing = fsm3.processEvent(TEvent::Timeout);
+    ts.expect_true(!missing.has_value(),
+                   "Missing event yields NoNextStateFound");
+    if (!missing.has_value()) {
+      ts.expect_eq(missing.error(), sm::ProcessEventErr::NoNextStateFound,
+                   "Error is NoNextStateFound for missing event");
+    }
+  }
+
+  // Test 10: Edge - disabling one event does not affect other event
+  {
+    sm::FSM<TState, TEvent> fsm(TState::Idle);
+    fsm.init();
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Restart);
+
+    fsm.disableTransition(TState::Idle, TState::Active, TEvent::Start);
+
+    auto s = fsm.processEvent(TEvent::Start);
+    ts.expect_true(!s.has_value(), "Disabled Start no longer transitions");
+    if (!s.has_value()) {
+      ts.expect_eq(s.error(), sm::ProcessEventErr::NoNextStateFound,
+                   "Start disabled -> NoNextStateFound");
+    }
+
+    auto r = fsm.processEvent(TEvent::Restart);
+    ts.expect_true(r.has_value(), "Restart still transitions to Active");
+    ts.expect_eq(fsm.getCurrentState(), TState::Active,
+                 "State is Active after Restart despite Start disabled");
+  }
+
+  // Test 11: Edge - guard on state applies to all events from that state
+  {
+    sm::FSM<TState, TEvent> fsm(TState::Idle);
+    fsm.init();
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Start);
+    fsm.enableTransition(TState::Idle, TState::Active, TEvent::Restart);
+    fsm.attachTransitionGuard(TState::Idle,
+                              [](TState, TState, TEvent) { return false; });
+
+    auto s = fsm.processEvent(TEvent::Start);
+    ts.expect_true(!s.has_value(), "Guard blocks Start transition");
+    auto r = fsm.processEvent(TEvent::Restart);
+    ts.expect_true(!r.has_value(), "Guard blocks Restart transition");
+  }
   std::println("\nSummary: {} passed, {} failed", ts.passed, ts.failed);
   return ts.failed == 0 ? 0 : 1;
 }
