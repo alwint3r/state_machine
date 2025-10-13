@@ -1,43 +1,33 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `include/state_machine/*.hpp`: Header-only C++23 FSM and enum helpers.
-- `example/`: Concrete example project (`state_machine_example`).
-- `tests/`: Self-contained tests (no framework).
-- `CMakeLists.txt`: Declares `state_machine` INTERFACE target with optional subdirs.
-- `build/`: CMake build artifacts (generated).
-- `build.sh`, `run.sh`: Convenience scripts for local development.
+- Library headers live in `include/state_machine`, organized by feature; keep new utilities header-only and self-contained.
+- Example application resides in `example/` and builds the `state_machine_example` demo; mirror its layout for additional samples.
+- Standalone tests sit under `tests/`; each test is a self-sufficient executable with its own `main`.
+- Generated CMake artifacts belong in `build/`; avoid checking in contents from that directory.
 
 ## Build, Test, and Development Commands
-- First configure: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`
-- Build all: `cmake --build build` or `./build.sh`
-- Run example: `./build/example/state_machine_example` or `./run.sh` (if `STATE_MACHINE_BUILD_EXAMPLES=ON`)
-- Run tests: `./build/tests/fsm_tests` and `./build/tests/test_mdspan` (if `STATE_MACHINE_BUILD_TESTS=ON`)
-- Reconfigure release: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
-
-Toolchain: C++23 with `std::mdspan`, `std::expected`, and `std::print` support (CMake ≥ 3.20; modern Clang/GCC/libc++/libstdc++).
+- Configure once with `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`; rerun if toolchain settings change.
+- Build everything via `cmake --build build` or `./build.sh`; both ensure headers remain interface-only.
+- Run the example with `./build/example/state_machine_example` when `STATE_MACHINE_BUILD_EXAMPLES=ON`.
+- Execute tests individually: `./build/tests/fsm_tests` and `./build/tests/test_mdspan` (enable via `STATE_MACHINE_BUILD_TESTS=ON`).
 
 ## Coding Style & Naming Conventions
-- Language: C++23; header-only library style; public headers under `include/state_machine`.
-- Indentation: 2 spaces; braces on the same line.
-- Naming: types/enums `PascalCase` (e.g., `TransitionType`), functions `lowerCamelCase` (e.g., `processEvent`), private members `camelCase_` suffix (e.g., `currentState_`).
-- Headers: prefer `.hpp`; keep headers self-contained and include what you use.
-- Prefer `constexpr`, spans/`mdspan`, and STL algorithms over raw loops where sensible.
+- Target C++23 with `std::mdspan`, `std::expected`, and `std::print`; prefer constexpr and STL algorithms over raw loops.
+- Indent two spaces; place braces on the same line; use `.hpp` headers that include what they use.
+- Name types and enums in PascalCase, functions in lowerCamelCase, and private members with a trailing `_` (e.g., `currentState_`).
+- Limit comments to clarifying complex intent; ensure new headers compile standalone.
 
 ## Testing Guidelines
-- Tests are simple executables using the standard library (no third-party framework).
-- File naming: `test_<topic>.cpp` at repo root.
-- Add tests to CMake by creating an executable, for example:
-  `add_executable(my_tests test_my_feature.cpp)`
-- Run with `./build/<target>` and return non-zero on failure.
-- Aim for meaningful console output: `[PASS]/[FAIL]` and a final summary.
+- Keep tests framework-free; return non-zero on failure and print `[PASS]/[FAIL]` summaries.
+- Name sources `test_<topic>.cpp` at repository root and register each with `add_executable` in CMake.
+- Run tests from the build tree; clear failures before submitting changes.
 
 ## Commit & Pull Request Guidelines
-- Commits: short, imperative subjects (e.g., "Add enum utilities", "Fix transition guard"); keep ≤ 72 chars; include a rationale body when needed.
-- Scope changes narrowly; separate refactors from behavior changes.
-- PRs: include a concise description, linked issues, before/after output for behavior, and instructions to reproduce (commands used).
-- Ensure `cmake --build build` succeeds and `./build/fsm_tests` passes before requesting review.
+- Write commits with imperative subjects ≤72 chars (e.g., "Add transition guard check"); split refactors from behavior changes.
+- For pull requests, describe scope, link issues, and include before/after output or commands (`cmake --build build`, `./build/tests/fsm_tests`).
+- Ensure example and tests pass locally before requesting review; document any skipped steps and rationale.
 
 ## Security & Configuration Tips
-- Avoid undefined behavior; validate enum bounds and sentinel usage (`MAX_VALUE`).
-- Keep public APIs header-only and minimal; prefer `std::function` only on boundaries.
+- Validate enum ranges and sentinel values; avoid undefined behavior in state transitions.
+- Keep public APIs minimal, header-only, and free of dynamic allocation unless isolated behind clear boundaries.
