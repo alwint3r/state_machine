@@ -86,7 +86,7 @@ int main() {
 ## API Overview
 - `template <StateID S, EventID E> class FSM` (header‑only)
   - `FSM(S initial)` — construct with initial state
-  - `void init()` — clear transition table (sets all to `S::MAX_VALUE`)
+  - `void init()` — clear transitions/guards/callbacks (sets all transitions to `S::MAX_VALUE`)
   - `void enableTransition(S from, S to, E onEvent)`
   - `void disableTransition(S from, S to, E onEvent)`
   - `std::expected<S, ProcessEventErr> processEvent(E event)`

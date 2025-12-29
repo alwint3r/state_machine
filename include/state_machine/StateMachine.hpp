@@ -8,7 +8,6 @@
 #include <expected>
 #include <functional>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -28,26 +27,6 @@ enum class TransitionType {
   Exit,
 };
 
-template <StateID State> struct TransitionCallbackMapKey {
-  TransitionType type;
-  State state;
-};
-
-struct TransitionCallbackMapKeyHash {
-  template <StateID State>
-  size_t operator()(const TransitionCallbackMapKey<State> &key) const noexcept {
-    size_t h1 = std::hash<int>{}(std::to_underlying(key.type));
-    size_t h2 = std::hash<int>{}(std::to_underlying(key.state));
-    return h1 ^ (h2 << 1);
-  }
-};
-
-template <StateID State>
-inline bool operator==(const TransitionCallbackMapKey<State> &lhs,
-                       const TransitionCallbackMapKey<State> &rhs) {
-  return lhs.type == rhs.type && lhs.state == rhs.state;
-}
-
 template <StateID State, EventID Event>
 using TransitionCallbackFn =
     std::function<void(TransitionType, State, State, Event)>;
@@ -61,31 +40,38 @@ enum class ProcessEventErr {
 };
 
 template <StateID S, EventID E> class FSM {
-public:
+ public:
   FSM(S initial) : currentState_(initial) {}
-  void init() { std::ranges::fill(transitionStorage_, S::MAX_VALUE); }
+
+  void init() {
+    std::ranges::fill(transitionStorage_, S::MAX_VALUE);
+    for (auto &guard : transitionGuards_) {
+      guard = {};
+    }
+    for (auto &callbacks : transitionCallbacks_) {
+      callbacks.clear();
+    }
+  }
 
   void attachOnEnterStateCallback(S state,
                                   TransitionCallbackFn<S, E> callback) {
-    attachTransitionCallback(TransitionType::Enter, state, callback);
+    attachTransitionCallback(TransitionType::Enter, state, std::move(callback));
   }
 
   void attachOnExitStateCallback(S state, TransitionCallbackFn<S, E> callback) {
-    attachTransitionCallback(TransitionType::Exit, state, callback);
+    attachTransitionCallback(TransitionType::Exit, state, std::move(callback));
   }
 
   void enableTransition(S from, S to, E onEvent) {
-    transitionSpan_(static_cast<size_t>(from), static_cast<size_t>(onEvent)) =
-        to;
+    transitionSpan_(stateIndex(from), eventIndex(onEvent)) = to;
   }
 
   void disableTransition(S from, S /*to*/, E onEvent) {
-    transitionSpan_(static_cast<size_t>(from), static_cast<size_t>(onEvent)) =
-        S::MAX_VALUE;
+    transitionSpan_(stateIndex(from), eventIndex(onEvent)) = S::MAX_VALUE;
   }
 
   void attachTransitionGuard(S state, TransitionGuard<S, E> guard) {
-    transitionGuardStorage_.insert_or_assign(state, guard);
+    transitionGuards_[stateIndex(state)] = std::move(guard);
   }
 
   std::expected<S, ProcessEventErr> processEvent(E event) {
@@ -94,43 +80,28 @@ public:
       return std::unexpected(ProcessEventErr::NoNextStateFound);
     }
 
-    auto guardIt = transitionGuardStorage_.find(currentState_);
-    if (guardIt != transitionGuardStorage_.end()) {
-      if (guardIt->second) {
-        bool result =
-            std::invoke(guardIt->second, currentState_, nextState, event);
-        if (!result) {
-          return std::unexpected(ProcessEventErr::TransitionForbidden);
-        }
+    auto &guard = transitionGuards_[stateIndex(currentState_)];
+    if (guard) {
+      bool result = std::invoke(guard, currentState_, nextState, event);
+      if (!result) {
+        return std::unexpected(ProcessEventErr::TransitionForbidden);
       }
     }
 
-    TransitionCallbackMapKey<S> key{};
-    typename TransitionCallbackStorage::iterator it;
-
-    key.type = TransitionType::Exit;
-    key.state = currentState_;
-    it = transitionCallbackStorage_.find(key);
-    if (it != transitionCallbackStorage_.end()) {
-      for (const auto &cb : it->second) {
-        if (cb) {
-          std::invoke(cb, TransitionType::Exit, currentState_, nextState,
-                      event);
-        }
+    for (const auto &cb : transitionCallbacks_[callbackIndex(
+             TransitionType::Exit, currentState_)]) {
+      if (cb) {
+        std::invoke(cb, TransitionType::Exit, currentState_, nextState, event);
       }
     }
 
     const S prevState = currentState_;
     currentState_ = nextState;
 
-    key.type = TransitionType::Enter;
-    key.state = nextState;
-    it = transitionCallbackStorage_.find(key);
-    if (it != transitionCallbackStorage_.end()) {
-      for (const auto &cb : it->second) {
-        if (cb) {
-          std::invoke(cb, TransitionType::Enter, prevState, nextState, event);
-        }
+    for (const auto &cb : transitionCallbacks_[callbackIndex(
+             TransitionType::Enter, nextState)]) {
+      if (cb) {
+        std::invoke(cb, TransitionType::Enter, prevState, nextState, event);
       }
     }
 
@@ -139,29 +110,45 @@ public:
 
   S getCurrentState() const { return currentState_; }
 
-private:
+ private:
+  static constexpr size_t stateIndex(S state) noexcept {
+    return static_cast<size_t>(state);
+  }
+
+  static constexpr size_t eventIndex(E event) noexcept {
+    return static_cast<size_t>(event);
+  }
+
+  static constexpr size_t typeIndex(TransitionType type) noexcept {
+    switch (type) {
+    case TransitionType::Enter:
+      return 0;
+    case TransitionType::Exit:
+      return 1;
+    }
+    return 0;
+  }
+
+  static constexpr size_t callbackIndex(TransitionType type, S state) noexcept {
+    return (typeIndex(type) * StateSize) + stateIndex(state);
+  }
+
   S computeTransition(S state, E event) {
-    return transitionSpan_(static_cast<size_t>(state),
-                           static_cast<size_t>(event));
+    return transitionSpan_(stateIndex(state), eventIndex(event));
   }
 
   void attachTransitionCallback(TransitionType type, S state,
                                 TransitionCallbackFn<S, E> callback) {
-    auto key = TransitionCallbackMapKey<S>{type, state};
-    auto it = transitionCallbackStorage_.find(key);
-    if (it == transitionCallbackStorage_.end()) {
-      TransitionCallbackVector vector{std::move(callback)};
-      transitionCallbackStorage_.insert({key, vector});
-    } else {
-      it->second.push_back(std::move(callback));
-    }
+    transitionCallbacks_[callbackIndex(type, state)].push_back(
+        std::move(callback));
   }
 
-private:
+ private:
   S currentState_{};
 
   static constexpr auto StateSize = enum_utils::enum_size_v<S>;
   static constexpr auto EventSize = enum_utils::enum_size_v<E>;
+  static constexpr auto CallbackSlotCount = 2 * StateSize;
 
   struct TransitionTableView {
     S *data{};
@@ -180,13 +167,9 @@ private:
   TransitionTableView transitionSpan_{transitionStorage_.data()};
 
   using TransitionCallbackVector = std::vector<TransitionCallbackFn<S, E>>;
-  using TransitionCallbackStorage =
-      std::unordered_map<TransitionCallbackMapKey<S>, TransitionCallbackVector,
-                         TransitionCallbackMapKeyHash>;
-  TransitionCallbackStorage transitionCallbackStorage_{};
+  std::array<TransitionCallbackVector, CallbackSlotCount> transitionCallbacks_{};
 
-  using TransitionGuardStorage = std::unordered_map<S, TransitionGuard<S, E>>;
-  TransitionGuardStorage transitionGuardStorage_{};
+  std::array<TransitionGuard<S, E>, StateSize> transitionGuards_{};
 };
 
 } // namespace state_machine
