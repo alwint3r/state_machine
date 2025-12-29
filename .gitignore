@@ -37,3 +37,6 @@ Thumbs.db
 
 # Local editor config
 .nvim.lua
+
+# Cache directories
+.cache/
