@@ -1,13 +1,12 @@
 #pragma once
 
+#include "EnumUtils.hpp"
 #include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstddef>
 #include <expected>
 #include <functional>
-#include <mdspan>
-#include <state_machine/EnumUtils.hpp>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -76,12 +75,12 @@ public:
   }
 
   void enableTransition(S from, S to, E onEvent) {
-    transitionSpan_[static_cast<size_t>(from), static_cast<size_t>(onEvent)] =
+    transitionSpan_(static_cast<size_t>(from), static_cast<size_t>(onEvent)) =
         to;
   }
 
-  void disableTransition(S from, S to, E onEvent) {
-    transitionSpan_[static_cast<size_t>(from), static_cast<size_t>(onEvent)] =
+  void disableTransition(S from, S /*to*/, E onEvent) {
+    transitionSpan_(static_cast<size_t>(from), static_cast<size_t>(onEvent)) =
         S::MAX_VALUE;
   }
 
@@ -138,12 +137,12 @@ public:
     return nextState;
   }
 
-  S getCurrentState() { return currentState_; }
+  S getCurrentState() const { return currentState_; }
 
 private:
   S computeTransition(S state, E event) {
-    return transitionSpan_[static_cast<size_t>(state),
-                           static_cast<size_t>(event)];
+    return transitionSpan_(static_cast<size_t>(state),
+                           static_cast<size_t>(event));
   }
 
   void attachTransitionCallback(TransitionType type, S state,
@@ -163,9 +162,22 @@ private:
 
   static constexpr auto StateSize = enum_utils::enum_size_v<S>;
   static constexpr auto EventSize = enum_utils::enum_size_v<E>;
+
+  struct TransitionTableView {
+    S *data{};
+
+    constexpr S &operator()(size_t stateIdx, size_t eventIdx) noexcept {
+      return data[(stateIdx * EventSize) + eventIdx];
+    }
+
+    constexpr const S &operator()(size_t stateIdx,
+                                  size_t eventIdx) const noexcept {
+      return data[(stateIdx * EventSize) + eventIdx];
+    }
+  };
+
   std::array<S, StateSize * EventSize> transitionStorage_{};
-  std::mdspan<S, std::extents<size_t, StateSize, EventSize>> transitionSpan_{
-      transitionStorage_.data()};
+  TransitionTableView transitionSpan_{transitionStorage_.data()};
 
   using TransitionCallbackVector = std::vector<TransitionCallbackFn<S, E>>;
   using TransitionCallbackStorage =
