@@ -185,7 +185,6 @@ private:
                          TransitionCallbackMapKeyHash>;
   TransitionCallbackStorage transitionCallbackStorage_{};
 
-  using TransitionGuardVector = std::vector<TransitionGuard<S, E>>;
   using TransitionGuardStorage = std::unordered_map<S, TransitionGuard<S, E>>;
   TransitionGuardStorage transitionGuardStorage_{};
 };
